@@ -1,0 +1,44 @@
+import tensorflow as tf 
+from tensorflow import keras
+import pandas as pd
+import numpy as np
+import keras_tuner as kt 
+from sklearn.model_selection import train_test_split
+from sklearn.datasets import fetch_california_housing
+
+fashion_mnist = keras.datasets.fashion_mnist.load_data()
+(X_train_full, y_train_full), (X_test, y_test) = fashion_mnist
+
+X_train_full = X_train_full / 255.0
+
+X_valid = X_train_full[:5000]
+X_train = X_train_full[5000:]
+y_valid = y_train_full[:5000]
+y_train = y_train_full[5000:]
+
+def build_model(hp):
+    n_hidden = hp.Int("n_hidden", min_value=0, max_value=8,default = 3)
+    n_neurons = hp.Int("n_neurons", min_value=16, max_value =256)
+    learning_rate = hp.Float("learning_rate",min_value = 1e-4, max_value = 1e-2, sampling="log")
+    optimizer = hp.Choice("optimizer", values = ["sgd","adam"])
+    if optimizer == "sgd":
+        optimizer = keras.optimizers.SGD(learning_rate = learning_rate)
+    else: 
+        optimizer = keras.optimizers.Adam(learning_rate = learning_rate)
+    
+    norm_layer = keras.layers.Normalization()
+    model = keras.Sequential()
+    model.add(keras.layers.Flatten())
+    for _ in range(n_hidden):
+        model.add(keras.layers.Dense(n_neurons, activation = "relu"))
+    model.add(keras.layers.Dense(10,activation="softmax"))
+    model.compile(loss="sparse_categorical_crossentropy",optimizer=optimizer,metrics=["accuracy"])
+    return model
+
+random_search_tuner = kt.RandomSearch(build_model, objective="val_accuracy", max_trials=5, overwrite = True, directory = "my_fashion_mnist", project_name="my_rnd_search",seed=42)
+random_search_tuner.search(X_train, y_train, epochs=10,validation_data=(X_valid,y_valid))
+best_model = random_search_tuner.get_best_models(num_models=3)[0]
+best_model.fit(X_train_full,y_train_full,epochs=10)
+test_loss,test_accuracy = best_model.evaluate(X_test, y_test)
+print(test_loss)
+print(test_accuracy)
